@@ -21,38 +21,6 @@
 #define MKDIR_MODE 0755
 #define MAX_PROC_NUM 256
 
-int child (void *args)
-{
-  std::cout << "running child function" << std::endl;
-  // 3
-  // change hostname and root folder
-  char *name = (char *) args;
-  std::cout << "got hostname: " << name << std::endl;
-  sethostname (name, strlen (name));
-
-  char * path = (char *)args + 1;
-  std::cout << "got path: " << path << std::endl;
-  chroot(path);
-  chdir(path);
-
-
-  // 4
-  // mount new procfs
-
-  // TODO mount procfs
-//  mount("proc", "/proc", "proc", 0, 0);
-
-
-  // 5
-  // run terminal/new program
-
-  //  char* _args[] ={"/bin/echo", (char*)argv + 1, (char *)0};
-  //  int ret = execvp("/bin/echo", _args);
-
-  return 0;
-}
-
-
 void make_directory(char * name){
   if (access(name, MKDIR_MODE) == -1)
     {
@@ -65,7 +33,7 @@ void make_directory(char * name){
     }
 }
 
-void create_pid_directory(){
+void create_cgroup_directories_pids(){
   make_directory((char *)"sys");
   chdir("/sys");
   make_directory((char *)"fs");
@@ -73,14 +41,43 @@ void create_pid_directory(){
   make_directory((char *)"cgroup");
   chdir("/sys/fs/cgroup");
   make_directory((char *)"pids");
+  chdir("/sys/fs/cgroup/pids");
+}
+
+int child (void *args)
+{
+  std::cout << "running child function" << std::endl;
+  // change root folder
+  char * path = (char *)args + 1;
+  chroot(path);
+  chdir(path);
+
+  // cgroups initialization of directories
+  create_cgroup_directories_pids ();
+
+  // change hostname
+  char *name = (char *) args;
+  std::cout << "got hostname: " << name << std::endl;
+  sethostname (name, strlen (name));
+
+
+  // 4
+  // mount new procfs
+
+  //  mount("proc", "/proc", "proc", 0, 0);
+
+
+  // 5
+  // run terminal/new program
+
+  //  char* _args[] ={"/bin/echo", (char*)argv + 1, (char *)0};
+  //  int ret = execvp("/bin/echo", _args);
+
+  return 0;
 }
 
 int main (int argc, char *argv[])
 {
-  // cgroups initialization of directories
-  create_pid_directory();
-  chdir((char *)"/");
-
   // create new process
   void* stack = malloc(STACK);
   int child_pid = clone(child, stack + STACK,
