@@ -26,7 +26,7 @@ void make_directory (char *name)
 {
   if (access (name, MKDIR_MODE) == -1)  // TODO check mode is relevant here
     {
-      if (mkdir (name, MKDIR_MODE))
+      if (mkdir (name, MKDIR_MODE) != 0)
         {
           std::cerr << "system error: " << "failed creating new directory: "
                     << name << std::endl;
@@ -123,7 +123,8 @@ int child (void *args)
   return 0;
 }
 
-void remove_directory(char * path){
+void remove_directory (char *path)
+{
   if (rmdir (path) != 0)
     {
       std::cerr
@@ -133,24 +134,25 @@ void remove_directory(char * path){
     }
 }
 
-void signal_handler(int signal_num){
- // unmount
+void signal_handler ()
+{
+  // unmount
 
   // remove files
-  chdir((char *)"/sys/fs/cgroup/pids");
-  remove((char *) "cgroup.procs");
-  remove((char *) "pids.max");
-  remove((char *) "notify_on_release");
-  remove_directory((char *)"/sys/fs/cgroup/pids");
-  remove_directory((char *)"/sys/fs/cgroup");
-  remove_directory((char *)"/sys/fs");
-  remove_directory((char *)"/sys");
+  chdir ((char *) "/sys/fs/cgroup/pids");
+  remove ((char *) "cgroup.procs");
+  remove ((char *) "pids.max");
+  remove ((char *) "notify_on_release");
+  remove_directory ((char *) "/sys/fs/cgroup/pids");
+  remove_directory ((char *) "/sys/fs/cgroup");
+  remove_directory ((char *) "/sys/fs");
+//  remove_directory((char *)"/sys");
 
 }
 
 int main (int argc, char *argv[])
 {
-  signal(SIGCHLD, signal_handler);
+//  signal(SIGCHLD, signal_handler);
   // create new process
   void *stack = malloc (STACK);
   int child_pid = clone (child, stack + STACK,
@@ -159,6 +161,7 @@ int main (int argc, char *argv[])
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
+  signal_handler ();
   return 0;
 }
 
