@@ -17,10 +17,10 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <fstream>
+#include <csignal>
 
 #define STACK 8192
 #define MKDIR_MODE 0755
-
 
 void make_directory (char *name)
 {
@@ -47,8 +47,9 @@ void create_cgroup_directories_pids ()
   chdir ("/sys/fs/cgroup/pids");
 }
 
-void write_string_to_file(char *path, char * filename, char * content){
-  chdir(path);
+void write_string_to_file (char *path, char *filename, char *content)
+{
+  chdir (path);
   if (access (filename, MKDIR_MODE) == 0)
     {
       std::cerr
@@ -57,13 +58,14 @@ void write_string_to_file(char *path, char * filename, char * content){
           << std::endl;
       exit (1);
     }
-  std::ofstream File(filename);
+  std::ofstream File (filename);
   File << content << std::endl;
-  File.close();
+  File.close ();
 }
 
-void write_int_to_file(char *path, char * filename, int content){
-  chdir(path);
+void write_int_to_file (char *path, char *filename, int content)
+{
+  chdir (path);
   if (access (filename, MKDIR_MODE) == 0)
     {
       std::cerr
@@ -72,9 +74,9 @@ void write_int_to_file(char *path, char * filename, int content){
           << std::endl;
       exit (1);
     }
-  std::ofstream File(filename);
+  std::ofstream File (filename);
   File << content << std::endl;
-  File.close();
+  File.close ();
 }
 
 int child (void *args)
@@ -95,34 +97,60 @@ int child (void *args)
   sethostname (name, strlen (name));
 
   write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                        (char *) "cgroup.procs",
-                        getpid ());
+                     (char *) "cgroup.procs",
+                     getpid ());
 
   write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                        (char *) "pids.max",
-                     *((int*) args+2));
+                     (char *) "pids.max",
+                     *((int *) args + 2));
 
   // mount new procfs
-  chdir(path);
-  mount("proc", "/proc", "proc", 0, 0);
+  chdir (path);
+  mount ("proc", "/proc", "proc", 0, 0);
 
 
   // run terminal/new program
 
-  //  char* _args[] ={"/bin/echo", (char*)argv + 1, (char *)0};
-  //  int ret = execvp("/bin/echo", _args);
+  char *_args[] = {(char *) args + 3, (char *) args + 4, (char *) 0};
+  int ret = execvp ((char *) args + 3, _args);
 
 
   // notify on release:
   write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                        (char *) "notify_on_release",
-                        1);
+                     (char *) "notify_on_release",
+                     1);
 
   return 0;
 }
 
+void remove_directory(char * path){
+  if (rmdir (path) != 0)
+    {
+      std::cerr
+          << "system error: failed removing directory: " <<
+          path << std::endl;
+      exit (1);
+    }
+}
+
+void signal_handler(int signal_num){
+ // unmount
+
+  // remove files
+  chdir((char *)"/sys/fs/cgroup/pids");
+  remove((char *) "cgroup.procs");
+  remove((char *) "pids.max");
+  remove((char *) "notify_on_release");
+  remove_directory((char *)"/sys/fs/cgroup/pids");
+  remove_directory((char *)"/sys/fs/cgroup");
+  remove_directory((char *)"/sys/fs");
+  remove_directory((char *)"/sys");
+
+}
+
 int main (int argc, char *argv[])
 {
+  signal(SIGCHLD, signal_handler);
   // create new process
   void *stack = malloc (STACK);
   int child_pid = clone (child, stack + STACK,
@@ -130,15 +158,7 @@ int main (int argc, char *argv[])
                          argv + 1);
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
-
   wait (nullptr);
-  // 6
-  // TODO unmount
-  // TODO delete cgroups
-//  if(rmdir () == 0){
-//
-//  }
-
   return 0;
 }
 
