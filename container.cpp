@@ -22,9 +22,16 @@
 #define STACK 8192
 #define MKDIR_MODE 0755
 
+
+void print_cur_dir(){
+  char tmp[256];
+  getcwd(tmp, 256);
+  std::cout << "Get: " << tmp << std::endl;
+}
+
 void make_directory (char *name)
 {
-  if (access (name, MKDIR_MODE) == -1)  // TODO check mode is relevant here
+  if (access (name, F_OK) == -1)  // TODO check mode is relevant here
     {
       if (mkdir (name, MKDIR_MODE) != 0)
         {
@@ -38,130 +45,167 @@ void make_directory (char *name)
 void create_cgroup_directories_pids ()
 {
   make_directory ((char *) "sys");
-  chdir ("/sys");
+  chdir ("sys");
   make_directory ((char *) "fs");
-  chdir ("/sys/fs");
+  chdir ("fs");
   make_directory ((char *) "cgroup");
-  chdir ("/sys/fs/cgroup");
+  chdir ("cgroup");
   make_directory ((char *) "pids");
-  chdir ("/sys/fs/cgroup/pids");
+  chdir ("pids");
 }
 
-void write_string_to_file (char *path, char *filename, char *content)
-{
-  chdir (path);
-  if (access (filename, MKDIR_MODE) == 0)
-    {
-      std::cerr
-          << "system error: failed finding file: " <<
-          path << "/" << filename
-          << std::endl;
-      exit (1);
-    }
-  std::ofstream File (filename);
-  File << content << std::endl;
-  File.close ();
-}
+//void write_string_to_file (char *path, char *filename, char *content)
+//{
+//  chdir (path);
+//  if (access (filename, MKDIR_MODE) == 0)
+//    {
+//      std::cerr
+//          << "system error: failed finding file: " <<
+//          path << "/" << filename
+//          << std::endl;
+//      exit (1);
+//    }
+//  std::ofstream File (filename);
+//  File << content << std::endl;
+//  File.close ();
+//}
 
 void write_int_to_file (char *path, char *filename, int content)
 {
   chdir (path);
-  if (access (filename, MKDIR_MODE) == 0)
-    {
-      std::cerr
-          << "system error: failed finding file: " <<
-          path << "/" << filename
-          << std::endl;
-      exit (1);
-    }
-  std::ofstream File (filename);
-  File << content << std::endl;
-  File.close ();
+  std::ofstream file;
+  file.open (filename);
+  std::cout << "file: " << filename << " created." << std::endl;
+
+  file << content << "\n";
+  std::cout << "-- writing in file: " << content << std::endl;
+  file.close ();
+  std::cout << "-- done writing" << std::endl;
+}
+
+void write_int_to_file (char *path, int content)
+{
+  std::ofstream file_to_write_to(path);
+//  file_to_write_to.open (path);
+  std::cout << "file_to_write_to: " << path << " created." << std::endl;
+
+  file_to_write_to << content;
+  std::cout << "-- writing in file_to_write_to: " << content << std::endl;
+  file_to_write_to.close ();
+  std::cout << "-- done writing" << std::endl;
+  print_cur_dir();
 }
 
 int child (void *args)
 {
+
+  char **temp = (char**) args;
   std::cout << "running child function" << std::endl;
+  for (int  i = 0; i < 5; i++){
+      std::cout << "args[" << i << "] = " << *(temp + i) << std::endl;
+
+    }
 
   // change root folder
-  char *path = (char *) args + 1;
+  char *path = *(temp + 2);
+  std::cout << "got path: " << path << std::endl;
   chroot (path);
   chdir (path);
-
+  print_cur_dir();
   // cgroups initialization of directories
   create_cgroup_directories_pids ();
 
   // change hostname
-  char *name = (char *) args;
+  char *name = *(temp + 1);
   std::cout << "got hostname: " << name << std::endl;
   sethostname (name, strlen (name));
 
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                     (char *) "cgroup.procs",
+//  chdir ((char *) "/sys/fs/cgroup/pids");
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/cgroup.procs",
                      getpid ());
-
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                     (char *) "pids.max",
-                     *((int *) args + 2));
+ int * a = (int *) *(temp + 3);
+//  chdir ((char *) "/sys/fs/cgroup/pids");
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/pids.max",
+                     *a);
 
   // mount new procfs
   chdir (path);
+  std::cout << "changed dir to: " << path << std::endl;
+
+  print_cur_dir();
   mount ("proc", "/proc", "proc", 0, 0);
 
 
   // run terminal/new program
 
-  char *_args[] = {(char *) args + 3, (char *) args + 4, (char *) 0};
-  int ret = execvp ((char *) args + 3, _args);
+  char *_args[] = {*(temp + 4), *(temp + 5), (char *) 0};
+  int ret = execvp (*(temp + 4), _args);
 
 
   // notify on release:
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids",
-                     (char *) "notify_on_release",
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/notify_on_release",
                      1);
 
   return 0;
 }
 
-void remove_directory (char *path)
+void remove_directory (char path[])
 {
   if (rmdir (path) != 0)
     {
       std::cerr
           << "system error: failed removing directory: " <<
-          path << std::endl;
+          path << " " << errno << std::endl;
       exit (1);
     }
 }
 
-void signal_handler ()
+void signal_handler (char *path)
 {
   // unmount
+  umount (path);
+  std::cout << "unmounted officially!" << std::endl;
 
   // remove files
   chdir ((char *) "/sys/fs/cgroup/pids");
-  remove ((char *) "cgroup.procs");
-  remove ((char *) "pids.max");
-  remove ((char *) "notify_on_release");
-  remove_directory ((char *) "/sys/fs/cgroup/pids");
-  remove_directory ((char *) "/sys/fs/cgroup");
-  remove_directory ((char *) "/sys/fs");
-//  remove_directory((char *)"/sys");
+  int ret = remove ((char *) "cgroup.procs");
+  std::cout << "file: " << "cgroup.procs" << " removed. ret val is: " << ret << std::endl;
+
+  ret = remove ((char *) "pids.max");
+  std::cout << "file: " << "pids.max" << " removed. ret val is: " << ret << std::endl;
+  ret = remove ((char *) "notify_on_release");
+  std::cout << "file: " << "notify_on_release" << " removed. ret val is: " << ret << std::endl;
+////  chdir ("");
+//  chdir ("/sys/fs/cgroup");
+////  std::cout << "current diredctory is: " <<  << std::endl;
+//
+//  remove_directory ((char *) "pids");
+//  chdir ("..");
+//  remove_directory ((char *) "cgroup");
+//  chdir ("..");
+//  remove_directory ((char *) "fs");
+//  chdir ("..");
+//  remove_directory ((char *) "sys");
 
 }
 
 int main (int argc, char *argv[])
 {
+  for (int  i = 0; i < argc; i++){
+      std::cout << "args[" << i << "] = " << argv[i] << std::endl;
+
+    }
 //  signal(SIGCHLD, signal_handler);
   // create new process
+//  chroot ((char *) argv + 2);
   void *stack = malloc (STACK);
   int child_pid = clone (child, stack + STACK,
                          CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
-                         argv + 1);
+                         argv);
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
-  signal_handler ();
+  signal_handler ((char *) argv + 2);
   return 0;
 }
 
