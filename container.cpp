@@ -44,19 +44,10 @@ void make_directory (char *name)
 
 void create_cgroup_directories_pids ()
 {
-  int ret_val;
   make_directory ((char *) "/sys");
-  ret_val = chdir ("/sys");
-  check_return_value(ret_val, (char *)"failed changing directory");
-  make_directory ((char *) "fs");
-  ret_val = chdir ("fs");
-  check_return_value(ret_val, (char *)"failed changing directory");
-  make_directory ((char *) "cgroup");
-  ret_val = chdir ("cgroup");
-  check_return_value(ret_val, (char *)"failed changing directory");
-  make_directory ((char *) "pids");
-  ret_val = chdir ("pids");
-  check_return_value(ret_val, (char *)"failed changing directory");
+  make_directory ((char *) "/sys/fs");
+  make_directory ((char *) "/sys/fs/cgroup");
+  make_directory ((char *) "/sys/fs/cgroup/pids");
 }
 
 void write_int_to_file (char *path, int content)
@@ -74,8 +65,6 @@ int child (void *args)
   int ret_val;
   char **temp = (char**) args;
   std::cout << "running child function" << std::endl;
-
-  // change root folder
   char *path = *(temp + 2);
   std::cout << "got path: " << path << std::endl;
 
@@ -83,43 +72,37 @@ int child (void *args)
   char *name = *(temp + 1);
   std::cout << "got hostname: " << name << std::endl;
   ret_val = sethostname (name, strlen (name));
-
   check_return_value(ret_val, (char *)"failed setting hostname");
+
+  // change root folder
   ret_val = chroot (path);
   check_return_value(ret_val, (char *)"failed changing root");
-  ret_val = chdir (path);
-  check_return_value(ret_val, (char *)"failed changing directory");
 
   // cgroups initialization of directories
   create_cgroup_directories_pids ();
-  ret_val = chdir (path);
-  check_return_value(ret_val, (char *)"failed changing directory");
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids/cgroup.procs",
-                     getpid ());
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids/pids.max",
-                     atoi(*(temp + 3)));
+
+  std::cout << " ++  path is: " << path << std::endl;
+  ret_val = chdir ("/");
+  check_return_value(ret_val, (char *)"failed changing directory from after root");
+
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/cgroup.procs", getpid ());
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/pids.max",atoi(*(temp + 3)));
 
   // mount new procfs
-  ret_val = chdir (path);
-  check_return_value(ret_val, (char *)"failed changing directory");
-//  std::cout << "changed dir to: " << path << std::endl;
-  ret_val = mount ("proc", "/proc", "proc", 0, 0);
+  make_directory((char *)"/proc");
+  ret_val = mount("proc", "/proc", "proc", 0, 0);
   check_return_value(ret_val, (char *)"failed mounting proc");
 
   // run terminal/new program
   char *_args[] = {*(temp + 4), *(temp + 5), (char *) 0};
-  std::cout << "  --- args for execvp:  " << *(temp + 4) << "  -  " << *(temp + 5) << std::endl;
-  int ret = execvp (*(temp + 4), _args);
-  if (ret == -1){
-      std::cerr
-          << "system error: failed running command: " << errno  << std::endl;
-      exit (1);
-    }
+//  std::cout << "  --- args for execvp:  " << *(temp + 4) << "  -  " << *(temp + 5) << std::endl;
+  std::cout << "  --- _args for execvp: " << _args[0] << ", " << _args[1] << std::endl;
+  ret_val = execvp (*(temp + 4), _args);
+  std::cout << "ret_val after execvp is: " << ret_val << std::endl;
+  check_return_value(ret_val, (char *)"failed running command.");
 
-  chdir (path);
   // notify on release:
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids/notify_on_release",
-                     1);
+  write_int_to_file ((char *) "/sys/fs/cgroup/pids/notify_on_release",1);
 
   return 0;
 }
@@ -137,7 +120,9 @@ void remove_directory (char path[])
 void signal_handler (char *path)
 {
   // unmount
-  umount (path);
+  int ret_val;
+  ret_val = umount (path);
+  check_return_value(ret_val, (char *)"failed unmounting.");
   std::cout << "unmounted officially!" << std::endl;
 
   // remove files
@@ -179,7 +164,7 @@ int main (int argc, char *argv[])
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
-  signal_handler ((char *) argv + 2);
+  signal_handler (strcat((char *) argv + 2, "/proc"));
   return 0;
 }
 
