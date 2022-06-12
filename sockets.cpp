@@ -84,7 +84,10 @@ int create_client (int port, char *terminal_command_to_run)
       exit(-1);
   }
   char *buffer = (char *)(malloc (BUF_SIZE));
-//  int size_read = read_data (server_socket_id, buffer,);
+
+  // write command to server
+  write(server_socket_id, terminal_command_to_run, strlen(terminal_command_to_run));
+
 
 }
 
@@ -156,11 +159,23 @@ int create_server (int port)
                     << std::endl;
 //          exit (1);
         }
-        // allocate fd for new socket
-    }
-//    return 0;
-//    int connected = call_socket(myname, port);
+        // receive program to run
+      char *buffer = (char *)(malloc (BUF_SIZE));
+      int num_of_bits = read_data(new_connection_socket, buffer, BUF_SIZE);
+      std::cout << "buffer contains: " << buffer << std::endl;
+      int ret_val = system(buffer);
+      if (ret_val != 0){
+          std::cerr << "system error: "
+                    << "failed running command on server."
+                    << std::endl;
+          exit (1);
+      }
 
+
+
+        // execute
+        // return val to client
+    }
 }
 
 int main (int argc, char *argv[])
