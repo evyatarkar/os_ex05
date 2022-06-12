@@ -95,26 +95,23 @@ int child (void *args)
 
   // run terminal/new program
   char *_args[] = {*(temp + 4), *(temp + 5), (char *) 0};
-//  std::cout << "  --- args for execvp:  " << *(temp + 4) << "  -  " << *(temp + 5) << std::endl;
+
   std::cout << "  --- _args for execvp: " << _args[0] << ", " << _args[1] << std::endl;
-  ret_val = execvp (*(temp + 4), _args);
+  const char *file_to_run = *(temp + 4);
+  ret_val = execvp (file_to_run, _args);
+  printf("%s\n", strerror(errno));
   std::cout << "ret_val after execvp is: " << ret_val << std::endl;
   check_return_value(ret_val, (char *)"failed running command.");
 
   // notify on release:
   write_int_to_file ((char *) "/sys/fs/cgroup/pids/notify_on_release",1);
-
   return 0;
 }
 
 void remove_directory (char path[])
 {
-  if (rmdir (path) != 0)
-    {
-      std::cerr << "system error: failed removing directory: " <<
-          path << std::endl;
-      exit (1);
-    }
+  int ret_val = rmdir (path);
+  check_return_val(ret_val, (char *)"failed removing dir."));
 }
 
 void signal_handler (char *path)
@@ -164,7 +161,7 @@ int main (int argc, char *argv[])
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
-  signal_handler (strcat((char *) argv + 2, "/proc"));
+  signal_handler ((char *)"/proc");
   return 0;
 }
 
