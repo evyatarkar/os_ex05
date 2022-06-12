@@ -8,14 +8,11 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <cstring>
-#include <netinet/in.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <iostream>
-#define MAXHOSTNAME 100
 #define MAX_CLIENTS 5
 #define BUF_SIZE 256
 
@@ -74,34 +71,30 @@ int read_data (int s, char *buf, int n)
 
 int create_client (int port, char *terminal_command_to_run)
 {
-  std::cout << "creating client socket" << std::endl;
-  char * name = (char *)"localhost";
+  char *name = (char *) "localhost";
   int server_socket_id = call_socket (name, port);
-  if (server_socket_id == -1){
+  if (server_socket_id == -1)
+    {
       std::cerr << "system error: "
                 << "failed creating connection to socket: from client"
                 << std::endl;
-      exit(-1);
-  }
-  char *buffer = (char *)(malloc (BUF_SIZE));
+      exit (-1);
+    }
+  char *buffer = (char *) (malloc (BUF_SIZE));
+  strcpy (buffer, terminal_command_to_run);
 
   // write command to server
-  write(server_socket_id, terminal_command_to_run, strlen(terminal_command_to_run));
-
-
+  write (server_socket_id, buffer, strlen (buffer));
 }
 
 int open_server_socket (int port)
 {
-//  char myname[MAXHOSTNAME + 1];
   const char *myname = "localhost";
-
   int s;
   struct sockaddr_in sa;
   struct hostent *hp;
   //hostnet initialization
-//  gethostname (myname, MAXHOSTNAME);
-  sethostname(myname, strlen(myname));
+  sethostname (myname, strlen (myname));
   hp = gethostbyname (myname);
   if (hp == NULL)
     {
@@ -134,47 +127,36 @@ int open_server_socket (int port)
 int get_connection (int s)
 {
   int t; /* socket of connection */
-  std::cout << "getting connection start" << std::endl;
   if ((t = accept (s, nullptr, nullptr)) < 0)
     {
-      std::cout << "getting connection failure" << std::endl;
       return -1;
     }
-  std::cout << "getting connection success" << std::endl;
   return t;
 }
 
 int create_server (int port)
 {
-  std::cout << "creating server socket" << std::endl;
   int server_socket_id = open_server_socket (port);
 
-  while(true)  // TODO O
+  while (true)
     {
       int new_connection_socket = get_connection (server_socket_id);
-      if (new_connection_socket == -1)  // TODO check this if needs to crash or live
+      if (new_connection_socket == -1)
         {
           std::cerr << "system error: "
                     << "failed creating connection to socket:  from server"
                     << std::endl;
-//          exit (1);
         }
-        // receive program to run
-      char *buffer = (char *)(malloc (BUF_SIZE));
-      int num_of_bits = read_data(new_connection_socket, buffer, BUF_SIZE);
-      std::cout << "buffer contains: " << buffer << std::endl;
-      int ret_val = system(buffer);
-      if (ret_val != 0){
+      char *buffer = (char *) (malloc (BUF_SIZE));
+      read_data (new_connection_socket, buffer, BUF_SIZE);
+      int ret_val = system (buffer);
+      if (ret_val != 0)
+        {
           std::cerr << "system error: "
                     << "failed running command on server."
                     << std::endl;
           exit (1);
-      }
-
-
-
-        // execute
-        // return val to client
+        }
     }
 }
 
