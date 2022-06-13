@@ -1,15 +1,12 @@
-//
-// Created by Evyatar on 06/06/2022.
-//
 //    GENERAL STRUCTURE:
 //    ./container <new_hostname> <new_filesystem_directory> <num_processes>
 //    <path_to_program_to_run_within_container> <args_for_program>
+
 #include <cstdio>
 #include <sched.h>
 #include <csignal>
 #include <unistd.h>
 #include <cstring>
-//#include <cstdlib>
 #include <bitset>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -22,6 +19,7 @@
 
 #define STACK 8192
 #define MKDIR_MODE 0755
+#define EXTRA_SIZE 100
 
 
 void check_return_value(int val, char *msg){
@@ -37,7 +35,7 @@ void make_directory (char *name)
   if (access (name, F_OK) == -1)
     {
       int ret_val = mkdir (name, MKDIR_MODE);
-      check_return_value(ret_val, (char *)"failed creating new directory -- from make directory");
+      check_return_value(ret_val, (char *)"failed creating new directory");
     }
 }
 
@@ -95,65 +93,37 @@ int child (void *args)
 
   // run terminal/new program
   char *_args[] = {*(temp + 4), *(temp + 5), (char *) 0};
-
-  std::cout << "  --- _args for execvp: " << _args[0] << ", " << _args[1] << std::endl;
   const char *file_to_run = *(temp + 4);
+
   ret_val = execvp (file_to_run, _args);
-  printf("%s\n", strerror(errno));
-  std::cout << "ret_val after execvp is: " << ret_val << std::endl;
   check_return_value(ret_val, (char *)"failed running command.");
 
-  // notify on release:
-  write_int_to_file ((char *) "/sys/fs/cgroup/pids/notify_on_release",1);
   return 0;
 }
 
-void remove_directory (char path[])
-{
-  int ret_val = rmdir (path);
-  check_return_val(ret_val, (char *)"failed removing dir."));
-}
-
-void signal_handler (char *path)
+void handle_dead_child (char *path_to_unmount, char *path_of_director_to_remove, void *stack_ptr)
 {
   // unmount
   int ret_val;
-  ret_val = umount (path);
+  ret_val = umount (strcat(path_to_unmount, "/proc"));
   check_return_value(ret_val, (char *)"failed unmounting.");
   std::cout << "unmounted officially!" << std::endl;
 
-  // remove files
-//  chdir ((char *) "/sys/fs/cgroup/pids");
-//  int ret = remove ((char *) "cgroup.procs");
-//  std::cout << "file: " << "cgroup.procs" << " removed. ret val is: " << ret << std::endl;
-//
-//  ret = remove ((char *) "pids.max");
-//  std::cout << "file: " << "pids.max" << " removed. ret val is: " << ret << std::endl;
-//  ret = remove ((char *) "notify_on_release");
-//  std::cout << "file: " << "notify_on_release" << " removed. ret val is: " << ret << std::endl;
-////  chdir ("");
-//  chdir ("/sys/fs/cgroup");
-////  std::cout << "current diredctory is: " <<  << std::endl;
-//
-//  remove_directory ((char *) "pids");
-//  chdir ("..");
-//  remove_directory ((char *) "cgroup");
-//  chdir ("..");
-//  remove_directory ((char *) "fs");
-//  chdir ("..");
-//  remove_directory ((char *) "sys");
+  // delete the child's stack
+  free(stack_ptr);
 
+  // remove files
+  void *cmd = malloc(strlen(path_of_director_to_remove) + EXTRA_SIZE);
+  strcpy((char *)cmd, "rm -r ");   //{'r', 'm', ' ', '-', 'r', ' '};
+  strcat((char *)cmd, path_of_director_to_remove);
+  std::cout << "THIS IS CMD NOW: " << (char *)cmd <<std::endl;
+  ret_val = system((char *)cmd);
+  check_return_value(ret_val, (char *)"failed removing files");
+  free(cmd);
 }
 
 int main (int argc, char *argv[])
 {
-//  for (int  i = 0; i < argc; i++){
-//      std::cout << "args[" << i << "] = " << argv[i] << std::endl;
-//
-//    }
-//  signal(SIGCHLD, signal_handler);
-  // create new process
-//  chroot ((char *) argv + 2);
   void *stack = malloc (STACK);
   int child_pid = clone (child, stack + STACK,
                          CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
@@ -161,7 +131,21 @@ int main (int argc, char *argv[])
   std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
-  signal_handler ((char *)"/proc");
+
+  void *temp_path1 = malloc (strlen(argv[2]) + EXTRA_SIZE);
+  strcpy((char *)temp_path1, argv[2]);
+
+  void *temp_path2 = malloc (strlen(argv[2]) + EXTRA_SIZE);
+  strcpy((char *)temp_path2, argv[2]);
+
+  void *temp_path3 = malloc (strlen(argv[2]) + EXTRA_SIZE);
+  strcpy((char *)temp_path3, argv[2]);
+
+  write_int_to_file (strcat((char *)temp_path1, "/sys/fs/cgroup/pids/notify_on_release"),1);
+  handle_dead_child ((char *)temp_path2, strcat((char *)temp_path3, "/sys/fs"), stack);
+  free(temp_path1);
+  free(temp_path2);
+  free(temp_path3);
   return 0;
 }
 
