@@ -51,24 +51,21 @@ void create_cgroup_directories_pids ()
 void write_int_to_file (char *path, int content)
 {
   std::ofstream file_to_write_to(path);
-  std::cout << "file_to_write_to: " << path << " created." << std::endl;
   file_to_write_to << content;
-  std::cout << "-- writing in file_to_write_to: " << content << std::endl;
   file_to_write_to.close ();
-  std::cout << "-- done writing" << std::endl;
+  std::string file_("chmod 0755 ");
+  file_.append(path);
+  system(file_.c_str());
 }
 
 int child (void *args)
 {
   int ret_val;
   char **temp = (char**) args;
-  std::cout << "running child function" << std::endl;
   char *path = *(temp + 2);
-  std::cout << "got path: " << path << std::endl;
 
   // change hostname
   char *name = *(temp + 1);
-  std::cout << "got hostname: " << name << std::endl;
   ret_val = sethostname (name, strlen (name));
   check_return_value(ret_val, (char *)"failed setting hostname");
 
@@ -79,12 +76,12 @@ int child (void *args)
   // cgroups initialization of directories
   create_cgroup_directories_pids ();
 
-  std::cout << " ++  path is: " << path << std::endl;
   ret_val = chdir ("/");
   check_return_value(ret_val, (char *)"failed changing directory from after root");
 
   write_int_to_file ((char *) "/sys/fs/cgroup/pids/cgroup.procs", getpid ());
   write_int_to_file ((char *) "/sys/fs/cgroup/pids/pids.max",atoi(*(temp + 3)));
+  write_int_to_file ((char *)"/sys/fs/cgroup/pids/notify_on_release",1);
 
   // mount new procfs
   make_directory((char *)"/proc");
@@ -98,6 +95,8 @@ int child (void *args)
   ret_val = execvp (file_to_run, _args);
   check_return_value(ret_val, (char *)"failed running command.");
 
+
+
   return 0;
 }
 
@@ -107,7 +106,6 @@ void handle_dead_child (char *path_to_unmount, char *path_of_director_to_remove,
   int ret_val;
   ret_val = umount (strcat(path_to_unmount, "/proc"));
   check_return_value(ret_val, (char *)"failed unmounting.");
-  std::cout << "unmounted officially!" << std::endl;
 
   // delete the child's stack
   free(stack_ptr);
@@ -116,7 +114,6 @@ void handle_dead_child (char *path_to_unmount, char *path_of_director_to_remove,
   void *cmd = malloc(strlen(path_of_director_to_remove) + EXTRA_SIZE);
   strcpy((char *)cmd, "rm -r ");   //{'r', 'm', ' ', '-', 'r', ' '};
   strcat((char *)cmd, path_of_director_to_remove);
-  std::cout << "THIS IS CMD NOW: " << (char *)cmd <<std::endl;
   ret_val = system((char *)cmd);
   check_return_value(ret_val, (char *)"failed removing files");
   free(cmd);
@@ -125,10 +122,9 @@ void handle_dead_child (char *path_to_unmount, char *path_of_director_to_remove,
 int main (int argc, char *argv[])
 {
   void *stack = malloc (STACK);
-  int child_pid = clone (child, stack + STACK,
+  int child_pid = clone (child, (char *) stack + STACK,
                          CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
                          argv);
-  std::cout << "cloned new child. child pid: " << child_pid << std::endl;
 
   wait (nullptr);
 
@@ -141,7 +137,6 @@ int main (int argc, char *argv[])
   void *temp_path3 = malloc (strlen(argv[2]) + EXTRA_SIZE);
   strcpy((char *)temp_path3, argv[2]);
 
-  write_int_to_file (strcat((char *)temp_path1, "/sys/fs/cgroup/pids/notify_on_release"),1);
   handle_dead_child ((char *)temp_path2, strcat((char *)temp_path3, "/sys/fs"), stack);
   free(temp_path1);
   free(temp_path2);

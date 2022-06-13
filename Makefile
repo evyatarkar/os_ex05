@@ -1,33 +1,11 @@
-CC=g++
-CXX=g++
-RANLIB=ranlib
+CONTAINER_OBJECTS = container.cpp
+SOCKETS_OBJECTS = sockets.cpp
 
-LIBSRC= container.cpp sockets.cpp
-LIBOBJ=$(LIBSRC:.cpp=.o)
+all: container sockets
 
-INCS=-I.
-CFLAGS = -Wall -std=c++11 -g $(INCS)
-CXXFLAGS = -Wall -std=c++11 -g $(INCS)
-
-LIBS = libVirtualMemory.a
-TARGETS = $(LIBS)
-
-TAR=tar
-TARFLAGS=-cvf
-TARNAME=ex5.tar
-TARSRCS=$(LIBSRC) Makefile README
-
-all: $(TARGETS)
-
-$(TARGETS): $(LIBOBJ)
-	$(AR) $(ARFLAGS) $@ $^
-	$(RANLIB) $@
-
-clean:
-	$(RM) $(TARGETS) $(LIBS) $(OBJ) $(LIBOBJ) *~ *core
-
-depend:
-	makedepend -- $(CFLAGS) -- $(SRC) $(LIBSRC)
-
-tar:
-	$(TAR) $(TARFLAGS) $(TARNAME) $(TARSRCS)
+container: $(CONTAINER_OBJECTS)
+	g++ $(CONTAINER_OBJECTS) -o container
+sockets: $(SOCKETS_OBJECTS)
+	g++ $(SOCKETS_OBJECTS) -o sockets
+clean: 
+	rm -f *.o container sockets

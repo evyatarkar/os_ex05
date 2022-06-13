@@ -8,9 +8,17 @@ FILES:
 
 container.cpp
 sockets.cpp
-MakeFile
+Makefile
 README
 
 
 QUESTIONS:
-1. pid namespaces give the child
+1. Pid namespaces are used to give a container the permission to create a process hierarchy.
+2. This will allow the process to have its own private view of the filesystem,
+    which can help to prevent it from accessing files that it should not have access to.
+3. Linux cgroups are used to limit, isolate and monitor process resources.
+4. The clone command is used to create a copy of an existing operating system.
+    The fork command is used to create a new process from an existing one.
+5. The chroot command changes the root directory for the current process and its children.
+6. Procfs is a virtual file system that provides an interface to kernel data structures.
+    It is used for debugging and performance monitoring.
