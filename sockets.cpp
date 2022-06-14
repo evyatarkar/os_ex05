@@ -85,6 +85,7 @@ int create_client (int port, char *terminal_command_to_run)
 
   // write command to server
   write (server_socket_id, buffer, strlen (buffer));
+  free(buffer);
   return 0;
 }
 
@@ -156,8 +157,10 @@ int create_server (int port)
           std::cerr << "system error: "
                     << "failed running command on server."
                     << std::endl;
+          free(buffer);
           exit (1);
         }
+      free(buffer);
     }
 }
 
